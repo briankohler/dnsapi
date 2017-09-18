@@ -1,0 +1,70 @@
+---
+version: "2"
+
+services:
+  consul:
+    image: consul:latest
+    hostname: consul
+    environment:
+      - LOG_LEVEL=error
+    ports:
+      - '8400:8400'
+      - '8500:8500'
+      - '8600:8600'
+    volumes:
+      - ./consuldata:/consul/data
+    command: ["agent","-server","-client","0.0.0.0","-bootstrap-expect","1","-ui","-data-dir","/consul/data"]
+
+  unbound:
+    build:
+      context: ./unbound
+    #privileged: true
+    image: unbound:local
+    depends_on:
+      - tinydns
+      - consul
+    environment:
+      - AUTH_DOMAINS=local.docker
+    ports:
+      - "53:53/udp"
+    links:
+      - tinydns
+      - consul
+
+  tinydns:
+    build:
+      context: ./tinydns
+    image: tinydns:local
+    #privileged: true
+    environment:
+      - USE_CONSULFS=false
+    volumes:
+      - ./data:/data
+     
+  dnsapi:
+    build:
+      context: ./dnsapi
+    image: dnsapi:local
+    #privileged: true
+    depends_on:
+      - unbound
+    links:
+      - consul
+      - unbound
+    #volumes:
+      #- ~/.aws:/root/.aws:ro
+    volumes_from:
+      - unbound
+      - tinydns
+    environment:
+      - USE_CONSULFS=false
+      - UNBOUND_REMOTE_HOST=unbound
+      - AUTH_DOMAINS=local.docker
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - POLLING_INTERVAL=60
+      - CONSUL_KEYSPACE=tinydns
+      - CREATE_TINYDATA_FILE=1
+      #- S3_BUCKET=
+    ports:
+      - '9080:9080'

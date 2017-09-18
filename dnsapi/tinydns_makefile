@@ -1,0 +1,32 @@
+data.cdb: data
+	cd /tmp && /usr/bin/tinydns-data
+	/bin/cp /tmp/data.cdb $(DNSAPIDUMPER_TINYDATADIR)/
+	rm -f /tmp/data*
+	if [ -n "$(S3_BUCKET)" ]; then \
+	  if [ ! -d $(DNSAPIDUMPER_TINYDATADIR)/.git ]; then \
+	    echo "Downloading tinydata from s3"; \
+	    aws s3 sync --quiet s3://$(S3_BUCKET)/tinydata/ $(DNSAPIDUMPER_TINYDATADIR)/ ;\
+	  fi; \
+	  if [ ! -d $(DNSAPIDUMPER_TINYDATADIR)/.git ]; then \
+	    cd $(DNSAPIDUMPER_TINYDATADIR)/; \
+	    git init; \
+	    echo "Creating git repo"; \
+	    echo "data.cdb" > .gitignore; \
+	    git config user.email "root@dnsapi.com"; \
+	    git config user.name "dnsapi"; \
+	    git add --all && git commit -m "initial commit"; \
+	    aws s3 sync --quiet --delete $(DNSAPIDUMPER_TINYDATADIR) s3://$(S3_BUCKET)/tinydata/ --exclude "data.cdb"; \
+	  else \
+	    cd $(DNSAPIDUMPER_TINYDATADIR) ; \
+	    git status | grep nothing > /dev/null ; \
+            if [ $$? -ne 0 ]; then \
+	      echo "Commiting changes and uploading to S3"; \
+	      git add --all && git commit -m "$(shell date +%H:%M:%S\ %Y-%m-%d)"; \
+	      aws s3 sync --quiet --delete $(DNSAPIDUMPER_TINYDATADIR) s3://$(S3_BUCKET)/tinydata/ --exclude "data.cdb" ; \
+	    fi; \
+	  fi; \
+	fi
+
+data:
+	/bin/cp $(DNSAPIDUMPER_TINYDATADIR)/data /tmp/
+
